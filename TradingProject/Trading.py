@@ -6,12 +6,12 @@ from ibapi.wrapper import EWrapper
 from ibapi.contract import Contract
 from ibapi.order import Order
 
-
 class IBapi(EWrapper, EClient):
     def __init__(self):
         EClient.__init__(self, self)
         self.data = {}
         self.positions = {}
+        self.owned_stocks = {}  # To keep track of owned stocks
 
     def historicalData(self, reqId, bar):
         if reqId not in self.data:
@@ -21,7 +21,6 @@ class IBapi(EWrapper, EClient):
 
     def historicalDataEnd(self, reqId: int, start: str, end: str):
         print("Historical data download finished", reqId, start, end)
-        # Calculate moving average and generate signals
         df = pd.DataFrame(self.data[reqId], columns=['Date', 'Close'])
         df['MA200'] = df['Close'].rolling(window=200).mean()
         df['Position'] = (df['Close'] > df['MA200']).astype(int)
@@ -38,24 +37,22 @@ class IBapi(EWrapper, EClient):
 
     def openOrder(self, orderId, contract, order, orderState):
         print('Open Order - ID:', orderId, 'Symbol:', contract.symbol, 'Action:', order.action)
+        if order.action == "BUY":
+            self.owned_stocks[contract.symbol] = True  # Mark as owned if a buy order is placed
 
     def execDetails(self, reqId, contract, execution):
-        print('Order Executed:', contract.symbol, 'Exec ID:', execution.execId, 'Order ID:', execution.orderId,
-              'Shares:', execution.shares)
-
+        print('Order Executed:', contract.symbol, 'Exec ID:', execution.execId, 'Order ID:', execution.orderId, 'Shares:', execution.shares)
 
 def run_loop():
     app.run()
-
 
 def stock_order(symbol):
     contract = Contract()
     contract.symbol = symbol
     contract.secType = 'STK'
-    contract.exchange = 'SMART'  # Choose appropriate exchange
+    contract.exchange = 'SMART'
     contract.currency = 'USD'
     return contract
-
 
 app = IBapi()
 app.connect('127.0.0.1', 7497, 123)
@@ -63,37 +60,44 @@ api_thread = threading.Thread(target=run_loop, daemon=True)
 api_thread.start()
 time.sleep(1)  # Ensure connection is established
 
-# Define stock symbol
-symbol = 'AAPL'
+# Define stock symbols
+symbols = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA']
 
-# Request historical data to calculate moving average
-app.reqHistoricalData(reqId=1,
-                      contract=stock_order(symbol),
-                      endDateTime='',
-                      durationStr='1 Y',
-                      barSizeSetting='1 day',
-                      whatToShow='ADJUSTED_LAST',
-                      useRTH=1,
-                      formatDate=1,
-                      keepUpToDate=False,
-                      chartOptions=[])
+# Start ID for requests
+reqId_start = 1
 
-time.sleep(10)
+# Request historical data to calculate moving average for each symbol
+for idx, symbol in enumerate(symbols):
+    app.reqHistoricalData(reqId=idx + reqId_start,
+                          contract=stock_order(symbol),
+                          endDateTime='',
+                          durationStr='1 Y',
+                          barSizeSetting='1 day',
+                          whatToShow='ADJUSTED_LAST',
+                          useRTH=1,
+                          formatDate=1,
+                          keepUpToDate=False,
+                          chartOptions=[])
 
-# Determine current position
-current_position = app.positions.get(1, 0)  # Latest position for the symbol
+    time.sleep(2)  # Stagger requests to avoid hitting rate limits
 
-# Create and transmit order based on the signal
-order = Order()
-order.action = 'BUY' if current_position == 1 else 'SELL'
-order.totalQuantity = 10
-order.orderType = 'MKT'
-order.orderId = app.nextorderId
-app.nextorderId += 1
-order.eTradeOnly = False
-order.firmQuoteOnly = False
+# Processing and placing orders might need a sophisticated approach to time management, like using events or loops
+time.sleep(20)  # Wait for all data to be fetched
 
-app.placeOrder(order.orderId, stock_order(symbol), order)
-time.sleep(3)
+# Create and transmit orders based on the signal
+for idx, symbol in enumerate(symbols):
+    current_position = app.positions.get(idx + reqId_start, 0)  # Latest position for the symbol
+    if current_position == 1 or (current_position == 0 and app.owned_stocks.get(symbol, False)):
+        order = Order()
+        order.action = 'BUY' if current_position == 1 else 'SELL'
+        order.totalQuantity = 10
+        order.orderType = 'MKT'
+        order.orderId = app.nextorderId
+        app.nextorderId += 1
+        order.eTradeOnly = False
+        order.firmQuoteOnly = False
+
+        app.placeOrder(order.orderId, stock_order(symbol), order)
+        time.sleep(2)
 
 app.disconnect()
