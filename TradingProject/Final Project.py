@@ -49,15 +49,15 @@ portfolio_allocations = positions.multiply(0.2)
 # Calculate portfolio returns: element-wise multiply and row-wise sum
 portfolio_returns = (portfolio_allocations.shift(1) * daily_returns).sum(axis=1)
 
-# Statistics
-portfolio_mean = portfolio_returns.mean()
-portfolio_std = portfolio_returns.std()
-constant_mean = constant_allocation.mean()
-constant_std = constant_allocation.std()
-
 # Calculate cumulative returns
 cumulative_constant = constant_allocation
 cumulative_strategy = (1 + portfolio_returns).cumprod()
+
+# Statistics
+print(f"Mean of Constant Allocation: {constant_allocation.mean():.2f}")
+print(f"Standard Deviation of Constant Allocation: {constant_allocation.std():.2f}")
+print(f"Mean of Cumulative Strategy: {cumulative_strategy.mean():.2f}")
+print(f"Standard Deviation of Cumulative Strategy: {cumulative_strategy.std():.2f}")
 
 # Plotting
 plt.figure(figsize=(10, 6))
@@ -68,3 +68,4 @@ plt.title('Cumulative Performance Comparison')
 plt.xlabel('Date')
 plt.ylabel('Cumulative Returns')
 plt.show()
+
