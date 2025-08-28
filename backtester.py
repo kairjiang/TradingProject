@@ -9,9 +9,9 @@ import os
 STOCK_SYMBOLS = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA']
 BENCHMARK_SYMBOL = 'SPY'  # S&P 500 ETF as the benchmark
 RISK_FREE_SYMBOL = '^IRX'  # 13 Week Treasury Bill
-START_DATE = dt.datetime(2010, 1, 1)
-END_DATE = dt.datetime(2023, 12, 31)
-MOVING_AVERAGE_WINDOW = 200
+START_DATE = dt.datetime(2020, 1, 1)
+END_DATE = dt.datetime(2025, 12, 31)
+MOVING_AVERAGE_WINDOW = 100
 CHART_OUTPUT_FOLDER = 'charts'
 
 def download_data(symbols, start, end):
@@ -78,7 +78,7 @@ def plot_and_save_charts(strategy_cumulative, benchmark_cumulative, strategy_sta
         f"Annualized Std. Dev: {benchmark_stats[1]:.2%}\n"
         f"Sharpe Ratio: {benchmark_stats[2]:.2f}"
     )
-    ax1.text(0.02, 0.95, stats_text, transform=ax1.transAxes, fontsize=10,
+    ax1.text(0.02, 0.6, stats_text, transform=ax1.transAxes, fontsize=10,
              verticalalignment='top', bbox=dict(boxstyle='round,pad=0.5', facecolor='wheat', alpha=0.5))
 
     # --- Loop to create a plot for each stock in a 2-column grid ---
