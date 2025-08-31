@@ -1,0 +1,5 @@
+# config.py
+SYMBOLS = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA']
+HOST = '127.0.0.1'
+PORT = 7497
+CLIENT_ID = 123

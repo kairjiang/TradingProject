@@ -1,3 +1,4 @@
+import config
 import threading
 import time
 import pandas as pd
@@ -83,11 +84,10 @@ def create_market_order(action, quantity):
     return order
 
 def main():
-    symbols = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA']
-    app = IBapi(symbols)
+    app = IBapi(config.SYMBOLS)
     
     try:
-        app.connect('127.0.0.1', 7497, clientId=123)
+        app.connect(config.HOST, config.PORT, clientId=config.CLIENT_ID)
         print("Connecting to TWS/Gateway...")
         
         api_thread = threading.Thread(target=app.run, daemon=True)
