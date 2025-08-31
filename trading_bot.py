@@ -1,4 +1,5 @@
 import config
+import logging
 import threading
 import time
 import pandas as pd
@@ -6,6 +7,11 @@ from ibapi.client import EClient
 from ibapi.wrapper import EWrapper
 from ibapi.contract import Contract
 from ibapi.order import Order
+
+logging.basicConfig(level=logging.INFO, 
+                    filename='trading_bot.log', 
+                    filemode='a', 
+                    format='%(asctime)s - %(levelname)s - %(message)s')
 
 class IBapi(EWrapper, EClient):
     def __init__(self, symbols):
@@ -25,7 +31,7 @@ class IBapi(EWrapper, EClient):
 
     def historicalDataEnd(self, reqId, start, end):
         """Callback for when historical data download is finished."""
-        print(f"Historical data download finished for request {reqId}.")
+        logging.info(f"Historical data download finished for request {reqId}.")
         
         symbol = self.symbols[reqId - 1]
         df = pd.DataFrame(self.data[reqId], columns=['Date', 'Close'])
@@ -38,10 +44,10 @@ class IBapi(EWrapper, EClient):
             last_price = df['Close'].iloc[-1]
             last_ma = df['MA200'].iloc[-1]
             self.signals[symbol] = 1 if last_price > last_ma else 0
-            print(f"Signal for {symbol}: {'BUY' if self.signals[symbol] == 1 else 'SELL'}")
+            logging.info(f"Signal for {symbol}: {'BUY' if self.signals[symbol] == 1 else 'SELL'}")
         else:
             self.signals[symbol] = 0
-            print(f"Could not generate signal for {symbol} due to insufficient data.")
+            logging.warning(f"Could not generate signal for {symbol} due to insufficient data.")
         
         if len(self.signals) == len(self.symbols):
             self.data_received_event.set()
@@ -49,21 +55,21 @@ class IBapi(EWrapper, EClient):
     def nextValidId(self, orderId):
         super().nextValidId(orderId)
         self.nextorderId = orderId
-        print(f"The next valid order id is: {self.nextorderId}")
+        logging.info(f"The next valid order id is: {self.nextorderId}")
 
     def orderStatus(self, orderId, status, filled, remaining, avgFillPrice, permId, parentId, lastFillPrice, clientId, whyHeld, mktCapPrice):
-        print(f"OrderStatus. Id: {orderId}, Status: {status}, Filled: {filled}, Remaining: {remaining}")
+        logging.info(f"OrderStatus. Id: {orderId}, Status: {status}, Filled: {filled}, Remaining: {remaining}")
 
     def openOrder(self, orderId, contract, order, orderState):
-        print(f"OpenOrder. PermId: {order.permId}, Symbol: {contract.symbol}, Action: {order.action}, Quantity: {order.totalQuantity}")
+        logging.info(f"OpenOrder. PermId: {order.permId}, Symbol: {contract.symbol}, Action: {order.action}, Quantity: {order.totalQuantity}")
 
     def execDetails(self, reqId, contract, execution):
-        print(f"ExecDetails. Symbol: {contract.symbol}, Shares: {execution.shares}, Price: {execution.price}")
+        logging.info(f"ExecDetails. Symbol: {contract.symbol}, Shares: {execution.shares}, Price: {execution.price}")
     
     def error(self, reqId, errorCode, errorString, advancedOrderReject=""):
         if 2100 <= errorCode <= 2110 or errorCode == 2158:
             return
-        print(f"Error. Id: {reqId}, Code: {errorCode}, Msg: {errorString}")
+        logging.error(f"Error. Id: {reqId}, Code: {errorCode}, Msg: {errorString}")
 
 def create_stock_contract(symbol):
     contract = Contract()
@@ -88,17 +94,17 @@ def main():
     
     try:
         app.connect(config.HOST, config.PORT, clientId=config.CLIENT_ID)
-        print("Connecting to TWS/Gateway...")
+        logging.info("Connecting to TWS/Gateway...")
         
         api_thread = threading.Thread(target=app.run, daemon=True)
         api_thread.start()
         
         while app.nextorderId is None:
-            print("Waiting for connection...")
+            logging.info("Waiting for connection...")
             time.sleep(1)
 
-        for i, symbol in enumerate(symbols):
-            print(f"Requesting historical data for {symbol}...")
+        for i, symbol in enumerate(config.SYMBOLS):
+            logging.info(f"Requesting historical data for {symbol}...")
             app.reqHistoricalData(
                 reqId=i + 1,
                 contract=create_stock_contract(symbol),
@@ -113,19 +119,19 @@ def main():
             )
             time.sleep(1)
 
-        print("Waiting for historical data to be processed...")
+        logging.info("Waiting for historical data to be processed...")
         app.data_received_event.wait(timeout=60)
 
         if not app.data_received_event.is_set():
-            print("Timed out waiting for historical data. Exiting.")
+            logging.error("Timed out waiting for historical data. Exiting.")
             return
 
-        print("\nPlacing trades based on signals...")
+        logging.info("\nPlacing trades based on signals...")
         for symbol, signal in app.signals.items():
             is_owned = app.owned_stocks.get(symbol, False)
             
             if signal == 1 and not is_owned:
-                print(f"Placing BUY order for {symbol}")
+                logging.info(f"Placing BUY order for {symbol}")
                 order = create_market_order('BUY', 10)
                 app.placeOrder(app.nextorderId, create_stock_contract(symbol), order)
                 app.owned_stocks[symbol] = True
@@ -133,18 +139,18 @@ def main():
                 time.sleep(1)
             
             elif signal == 0 and is_owned:
-                print(f"Placing SELL order for {symbol}")
+                logging.info(f"Placing SELL order for {symbol}")
                 order = create_market_order('SELL', 10)
                 app.placeOrder(app.nextorderId, create_stock_contract(symbol), order)
                 app.owned_stocks[symbol] = False
                 app.nextorderId += 1
                 time.sleep(1)
         
-        print("\nFinished placing orders. Waiting for 10 seconds before disconnecting.")
+        logging.info("\nFinished placing orders. Waiting for 10 seconds before disconnecting.")
         time.sleep(10)
 
     finally:
-        print("Disconnecting...")
+        logging.info("Disconnecting...")
         app.disconnect()
 
 if __name__ == "__main__":
