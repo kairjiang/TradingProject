@@ -64,7 +64,15 @@ class IBapi(EWrapper, EClient):
         logging.info(f"OpenOrder. PermId: {order.permId}, Symbol: {contract.symbol}, Action: {order.action}, Quantity: {order.totalQuantity}")
 
     def execDetails(self, reqId, contract, execution):
+        super().execDetails(reqId, contract, execution)
         logging.info(f"ExecDetails. Symbol: {contract.symbol}, Shares: {execution.shares}, Price: {execution.price}")
+
+        if execution.side == "BOT":
+            self.owned_stocks[contract.symbol] = True
+            logging.info(f"Confirmed BUY for {contract.symbol}. Updated ownership to True.")
+        elif execution.side == "SLD":
+            self.owned_stocks[contract.symbol] = False
+            logging.info(f"Confirmed SELL for {contract.symbol}. Updated ownership to False.")
     
     def error(self, reqId, errorCode, errorString, advancedOrderReject=""):
         if 2100 <= errorCode <= 2110 or errorCode == 2158:
@@ -91,6 +99,7 @@ def create_market_order(action, quantity):
 
 def main():
     app = IBapi(config.SYMBOLS)
+    symbol_reqId_map = {symbol: i + 1 for i, symbol in enumerate(config.SYMBOLS)}
     
     try:
         app.connect(config.HOST, config.PORT, clientId=config.CLIENT_ID)
@@ -131,16 +140,22 @@ def main():
             is_owned = app.owned_stocks.get(symbol, False)
             
             if signal == 1 and not is_owned:
-                logging.info(f"Placing BUY order for {symbol}")
-                order = create_market_order('BUY', 10)
-                app.placeOrder(app.nextorderId, create_stock_contract(symbol), order)
-                app.owned_stocks[symbol] = True
-                app.nextorderId += 1
-                time.sleep(1)
+                reqId = symbol_reqId_map[symbol]
+                last_price = app.data[reqId][-1][1] 
+                quantity = int(config.CAPITAL_PER_TRADE / last_price)
+                
+                if quantity > 0:
+                    logging.info(f"Placing BUY order for {quantity} shares of {symbol} at ~${last_price:.2f}")
+                    order = create_market_order('BUY', quantity)
+                    app.placeOrder(app.nextorderId, create_stock_contract(symbol), order)
+                    app.owned_stocks[symbol] = True
+                    app.nextorderId += 1
+                    time.sleep(1)
             
             elif signal == 0 and is_owned:
-                logging.info(f"Placing SELL order for {symbol}")
-                order = create_market_order('SELL', 10)
+                quantity_to_sell = 10 
+                logging.info(f"Placing SELL order for {quantity_to_sell} shares of {symbol}")
+                order = create_market_order('SELL', quantity_to_sell)
                 app.placeOrder(app.nextorderId, create_stock_contract(symbol), order)
                 app.owned_stocks[symbol] = False
                 app.nextorderId += 1

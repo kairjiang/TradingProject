@@ -1,4 +1,5 @@
 # config.py
+CAPITAL_PER_TRADE = 1000  
 SYMBOLS = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA']
 HOST = '127.0.0.1'
 PORT = 7497
